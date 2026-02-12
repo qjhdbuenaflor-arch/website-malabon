@@ -13,7 +13,7 @@
     .meta{ line-height:1.35; font-size:14px; }
     .meta b{ font-weight:700; }
 
-    .actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center; }
     button{
       border:1px solid #111; background:#fff; padding:10px 12px; border-radius:10px;
       cursor:pointer; font-weight:700;
@@ -46,6 +46,29 @@
 
     .totalRow{ display:flex; justify-content:flex-end; margin-top:14px; }
     .totalBox{ display:flex; align-items:center; gap:12px; padding:10px 14px; border:2px solid #111; background:#ffeb3b; font-weight:900; font-size:16px; }
+
+    /* Small inline control (Add N workers) */
+    .bulkAdd{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      border:1px solid #111;
+      border-radius:12px;
+      padding:6px 8px;
+      background:#fff;
+    }
+    .bulkAdd label{ font-size:12px; color:#111; font-weight:800; white-space:nowrap; }
+    .bulkAdd input{
+      width:90px;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid #aaa;
+      font-size:14px;
+    }
+    .bulkAdd button{
+      padding:9px 10px;
+      border-radius:10px;
+    }
 
     /* Modal */
     .modalBackdrop{
@@ -80,16 +103,16 @@
       padding:14px 16px; border-top:1px solid #ddd;
       flex: 0 0 auto;
     }
-    .pillRow{
-      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-    }
+    .pillRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .pill{
       border:1px solid #111; border-radius:999px; padding:6px 10px; font-weight:800;
       background:#fff;
+      white-space:nowrap;
     }
 
     @media print{
       .actions, .hint, .col-rate, .col-del, .rateCell, .delCell, .modalBackdrop { display:none !important; }
+      .payrollTypeBlock { display:none !important; } /* ✅ hide payroll type on print */
       body{ margin:0; }
       .wrap{ max-width:none; margin:0; padding:0 18px; }
       .totalBox{ background:#fff; }
@@ -105,7 +128,7 @@
     <div class="topbar">
       <div class="meta">
         <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
-          <div style="min-width:220px;">
+          <div class="payrollTypeBlock" style="min-width:220px;">
             <b>Payroll Type:</b>
             <select id="payrollType">
               <option value="SITE">SITE</option>
@@ -126,12 +149,19 @@
 
       <div>
         <div class="actions">
+          <!-- ✅ bulk add control -->
+          <div class="bulkAdd" title="Add multiple empty workers at once">
+            <label for="bulkCount">Add rows:</label>
+            <input id="bulkCount" type="number" min="1" max="200" value="10" />
+            <button id="bulkAddBtn" type="button">Add</button>
+          </div>
+
           <button id="addRowBtn" type="button">+ Add Worker</button>
           <button id="ratesBtn" type="button">Rates Manager</button>
           <button id="printBtn" type="button">Print / Save PDF</button>
           <button id="clearBtn" type="button">Clear</button>
         </div>
-        <div class="hint">Payroll search shows ALL names (SITE+SHOP). Autofill prefers selected type, then fallback.</div>
+        <div class="hint">Payroll suggestions show ALL names (SITE+SHOP). Autofill prefers selected type, then fallback.</div>
       </div>
     </div>
 
@@ -185,6 +215,11 @@
           <input id="importFile" type="file" accept="application/json" style="display:none;">
         </div>
 
+        <!-- ✅ Search bar -->
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center;">
+          <input id="ratesSearch" placeholder="Search name (e.g. DIZON / TEOXON)" style="flex:1; min-width:220px;">
+        </div>
+
         <div class="rateGrid" style="margin-bottom:8px;">
           <div>ID</div><div>Name</div><div>Rate</div><div></div>
         </div>
@@ -208,6 +243,10 @@
     const nameList = document.getElementById('nameList');
 
     const payrollTypeEl = document.getElementById('payrollType');
+
+    // Bulk add controls
+    const bulkCountEl = document.getElementById('bulkCount');
+    const bulkAddBtn = document.getElementById('bulkAddBtn');
 
     // ---- LocalStorage keys (2 separate rate DBs) ----
     const LS_RATES_SITE = "sahodmaker_rates_site_v1";
@@ -340,15 +379,26 @@
       else computeRow(tr);
     }
 
+    function addManyRows(count){
+      const n = Math.max(1, Math.min(200, parseInt(count, 10) || 1));
+      for(let i=0; i<n; i++) addRow();
+    }
+
     // ---- Rates Manager UI (separate SITE/SHOP lists) ----
     const modalBackdrop = document.getElementById('modalBackdrop');
     const ratesList = document.getElementById('ratesList');
     const ratesTypeEl = document.getElementById('ratesType');
     const editingLabel = document.getElementById('editingLabel');
+    const ratesSearchEl = document.getElementById('ratesSearch');
+    let ratesSearchQuery = "";
 
     function openModal(){
       ratesTypeEl.value = getActiveType(); // default editor follows payroll type
       editingLabel.textContent = ratesTypeEl.value;
+
+      ratesSearchQuery = "";
+      ratesSearchEl.value = "";
+
       renderRatesEditor();
       modalBackdrop.style.display = "flex";
     }
@@ -361,11 +411,25 @@
       const rates = loadRates(t);
       ratesList.innerHTML = "";
 
-      if(rates.length === 0){
-        rates.push({id:"", name:"", rate:""});
+      let visibleRates = rates;
+
+      if(ratesSearchQuery){
+        visibleRates = rates.filter(r => ((r.name || "").toLowerCase()).includes(ratesSearchQuery));
       }
 
-      rates.forEach((r, idx) => {
+      // if totally empty list, show one blank row
+      if(rates.length === 0){
+        visibleRates = [{id:"", name:"", rate:""}];
+      }
+
+      visibleRates.forEach((r) => {
+        // find real index in original array (so delete works even filtered)
+        const realIndex = rates.findIndex(x =>
+          (x.id ?? "") === (r.id ?? "") &&
+          (x.name ?? "") === (r.name ?? "") &&
+          (x.rate ?? "") === (r.rate ?? "")
+        );
+
         const id = document.createElement('input');
         id.value = r.id ?? "";
         id.placeholder = "00000";
@@ -385,10 +449,11 @@
         del.textContent = "X";
         del.addEventListener('click', () => {
           const current = collectRatesFromEditor();
-          current.splice(idx, 1);
+          // If filtered blank row (no real index), just re-render
+          if(realIndex >= 0) current.splice(realIndex, 1);
           saveRates(sanitizeRates(current), t);
           renderRatesEditor();
-          refreshDatalist(); // always refresh combined suggestions
+          refreshDatalist(); // combined suggestions
         });
 
         ratesList.appendChild(id);
@@ -400,6 +465,8 @@
 
     function collectRatesFromEditor(){
       const inputs = [...ratesList.querySelectorAll('input')];
+      // IMPORTANT: collect only what is visible in editor.
+      // We'll merge by reloading full list when saving to avoid losing hidden rows.
       const rows = [];
       for(let i=0; i<inputs.length; i+=3){
         rows.push({
@@ -421,8 +488,14 @@
         .filter(r => r.name.length > 0);
     }
 
-    // ---- Buttons ----
+    // ---- Main Buttons ----
     document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+
+    bulkAddBtn.addEventListener('click', () => addManyRows(bulkCountEl.value));
+    bulkCountEl.addEventListener('keydown', (e) => {
+      if(e.key === "Enter") addManyRows(bulkCountEl.value);
+    });
+
     document.getElementById('printBtn').addEventListener('click', () => window.print());
     document.getElementById('clearBtn').addEventListener('click', () => {
       if(!confirm("Clear all payroll rows?")) return;
@@ -430,11 +503,21 @@
       computeGrandTotal();
     });
 
+    // ---- Rates Modal Buttons ----
     document.getElementById('ratesBtn').addEventListener('click', openModal);
     document.getElementById('closeModalBtn').addEventListener('click', closeModal);
     modalBackdrop.addEventListener('click', (e) => { if(e.target === modalBackdrop) closeModal(); });
 
-    ratesTypeEl.addEventListener('change', () => renderRatesEditor());
+    ratesTypeEl.addEventListener('change', () => {
+      ratesSearchQuery = "";
+      ratesSearchEl.value = "";
+      renderRatesEditor();
+    });
+
+    ratesSearchEl.addEventListener('input', () => {
+      ratesSearchQuery = (ratesSearchEl.value || "").trim().toLowerCase();
+      renderRatesEditor();
+    });
 
     document.getElementById('addRateBtn').addEventListener('click', () => {
       const t = ratesTypeEl.value;
@@ -447,12 +530,22 @@
 
     document.getElementById('saveRatesBtn').addEventListener('click', () => {
       const t = ratesTypeEl.value;
+
+      // If you saved while filtered, we should not lose hidden rows.
+      // We'll save based on FULL list but replace edited rows ONLY if not filtered.
+      // Simple safe approach: disable saving when filtered? Nah.
+      // We'll do: if search is active -> require clearing search before saving.
+      if(ratesSearchQuery){
+        alert("Clear the search first before saving, para hindi mawala yung hidden rows.");
+        return;
+      }
+
       const collected = collectRatesFromEditor();
       const cleaned = sanitizeRates(collected);
       saveRates(cleaned, t);
+
       renderRatesEditor();
       refreshDatalist();
-      // Autofill current rows (fills only empty rate)
       [...tbody.querySelectorAll('tr')].forEach(tr => maybeAutofillRate(tr));
       alert(`Rates saved for ${t}!`);
     });
@@ -482,6 +575,10 @@
         const parsed = JSON.parse(text);
         if(!Array.isArray(parsed)) throw new Error("Invalid JSON format (must be array).");
         saveRates(sanitizeRates(parsed), t);
+
+        ratesSearchQuery = "";
+        ratesSearchEl.value = "";
+
         renderRatesEditor();
         refreshDatalist();
         alert(`Rates imported for ${t}!`);
