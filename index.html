@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sahod Maker</title>
+  <style>
+    :root{ --border:#111; --muted:#666; }
+    body{ font-family: Arial, Helvetica, sans-serif; margin:24px; color:#111; }
+    .wrap{ max-width: 1060px; margin: 0 auto; }
+
+    .topbar{ display:flex; gap:16px; align-items:flex-start; justify-content:space-between; margin-bottom: 18px; }
+    .meta{ line-height:1.35; font-size:14px; }
+    .meta b{ font-weight:700; }
+
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+    button{
+      border:1px solid #111; background:#fff; padding:10px 12px; border-radius:10px;
+      cursor:pointer; font-weight:700;
+    }
+    button:hover{ opacity:.85; }
+    .hint{ color: var(--muted); font-size: 12px; margin-top: 6px; text-align:right; }
+
+    table{ width:100%; border-collapse:collapse; margin-top:10px; }
+    thead th{
+      font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+      border-bottom: 2px solid var(--border); padding: 10px 8px; text-align:left;
+    }
+    tbody td{ padding:8px 8px; border-bottom:1px solid #ddd; vertical-align:middle; font-size:14px; }
+    tbody tr:last-child td{ border-bottom: 2px solid var(--border); }
+
+    .col-id{ width: 140px; }
+    .col-name{ width: 360px; font-weight:700; }
+    .col-rate{ width: 140px; }
+    .col-hrs{ width: 140px; text-align:right; }
+    .col-net{ width: 160px; text-align:right; font-weight:700; }
+    .col-del{ width: 70px; text-align:center; }
+
+    input, select{
+      width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #aaa;
+      border-radius:10px; font-size:14px;
+    }
+    input.num{ text-align:right; font-variant-numeric: tabular-nums; }
+    .readonly{ background:#f6f6f6; border-color:#ccc; font-weight:700; }
+    .smallbtn{ border:1px solid #111; background:#fff; padding:6px 10px; border-radius:10px; cursor:pointer; font-weight:700; }
+
+    .totalRow{ display:flex; justify-content:flex-end; margin-top:14px; }
+    .totalBox{ display:flex; align-items:center; gap:12px; padding:10px 14px; border:2px solid #111; background:#ffeb3b; font-weight:900; font-size:16px; }
+
+    /* Modal */
+    .modalBackdrop{
+      position:fixed; inset:0; background:rgba(0,0,0,.35);
+      display:none; align-items:center; justify-content:center; padding:16px;
+      z-index: 9999;
+    }
+    .modal{
+      width:min(980px, 100%);
+      background:#fff; border:2px solid #111; border-radius:16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+      display:flex; flex-direction:column;
+      max-height: 85vh;
+      overflow:hidden;
+    }
+    .modalHeader{
+      display:flex; justify-content:space-between; align-items:center;
+      padding:14px 16px; border-bottom:1px solid #ddd;
+      flex: 0 0 auto;
+      gap: 10px;
+    }
+    .modalHeader h2{ margin:0; font-size:16px; }
+    .modalBody{
+      padding:16px;
+      overflow-y:auto;
+      flex: 1 1 auto;
+    }
+    .rateGrid{ display:grid; grid-template-columns: 180px 1fr 160px 80px; gap:10px; }
+    .rateGrid > div{ font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .modalFooter{
+      display:flex; gap:10px; justify-content:flex-end;
+      padding:14px 16px; border-top:1px solid #ddd;
+      flex: 0 0 auto;
+    }
+    .pillRow{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    }
+    .pill{
+      border:1px solid #111; border-radius:999px; padding:6px 10px; font-weight:800;
+      background:#fff;
+    }
+
+    @media print{
+      .actions, .hint, .col-rate, .col-del, .rateCell, .delCell, .modalBackdrop { display:none !important; }
+      body{ margin:0; }
+      .wrap{ max-width:none; margin:0; padding:0 18px; }
+      .totalBox{ background:#fff; }
+      input, select{ border:none; padding:0; }
+      .readonly{ background:transparent; }
+      .col-hrs, .col-net { text-align:right; }
+      .col-name{ font-weight:700; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="meta">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+          <div style="min-width:220px;">
+            <b>Payroll Type:</b>
+            <select id="payrollType">
+              <option value="SITE">SITE</option>
+              <option value="SHOP">SHOP</option>
+            </select>
+          </div>
+          <div style="flex:1; min-width:260px;">
+            <b>Project:</b> <input id="project" value="SYSU" />
+          </div>
+        </div>
+
+        <div style="margin-top:6px;"><b>Sub-Contractor:</b> <input id="subcon" value="Rudy Buenaflor" /></div>
+        <div style="display:flex; gap:12px; margin-top:6px; flex-wrap:wrap;">
+          <div><b>Start Date:</b> <input id="startDate" type="date" value="2026-01-29" /></div>
+          <div><b>End Date:</b> <input id="endDate" type="date" value="2026-02-04" /></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="actions">
+          <button id="addRowBtn" type="button">+ Add Worker</button>
+          <button id="ratesBtn" type="button">Rates Manager</button>
+          <button id="printBtn" type="button">Print / Save PDF</button>
+          <button id="clearBtn" type="button">Clear</button>
+        </div>
+        <div class="hint">Payroll search shows ALL names (SITE+SHOP). Autofill prefers selected type, then fallback.</div>
+      </div>
+    </div>
+
+    <datalist id="nameList"></datalist>
+
+    <table id="payrollTable">
+      <thead>
+        <tr>
+          <th class="col-id">ID. No.</th>
+          <th class="col-name">Employee Name</th>
+          <th class="col-rate">Rate</th>
+          <th class="col-hrs">Total Hrs.</th>
+          <th class="col-net">Net Pay</th>
+          <th class="col-del"></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <div class="totalRow">
+      <div class="totalBox">
+        <span>Total:</span>
+        <span id="grandTotal">₱0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rates Manager Modal (separate lists) -->
+  <div class="modalBackdrop" id="modalBackdrop">
+    <div class="modal">
+      <div class="modalHeader">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <h2 style="margin-right:8px;">Rates Manager</h2>
+          <span class="pill">Editing: <span id="editingLabel">SITE</span></span>
+        </div>
+
+        <div class="pillRow">
+          <select id="ratesType" style="width:140px;">
+            <option value="SITE">SITE</option>
+            <option value="SHOP">SHOP</option>
+          </select>
+          <button id="closeModalBtn" type="button">Close</button>
+        </div>
+      </div>
+
+      <div class="modalBody">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+          <button id="addRateBtn" type="button">+ Add Rate</button>
+          <button id="exportRatesBtn" type="button">Export (JSON)</button>
+          <button id="importRatesBtn" type="button">Import (JSON)</button>
+          <input id="importFile" type="file" accept="application/json" style="display:none;">
+        </div>
+
+        <div class="rateGrid" style="margin-bottom:8px;">
+          <div>ID</div><div>Name</div><div>Rate</div><div></div>
+        </div>
+
+        <div id="ratesList" class="rateGrid" style="row-gap:10px;"></div>
+
+        <p style="margin-top:14px; color:var(--muted); font-size:12px;">
+          Rates Manager is separate per type. Payroll suggestions are combined.
+        </p>
+      </div>
+
+      <div class="modalFooter">
+        <button id="saveRatesBtn" type="button">Save Rates</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tbody = document.getElementById('tbody');
+    const grandTotalEl = document.getElementById('grandTotal');
+    const nameList = document.getElementById('nameList');
+
+    const payrollTypeEl = document.getElementById('payrollType');
+
+    // ---- LocalStorage keys (2 separate rate DBs) ----
+    const LS_RATES_SITE = "sahodmaker_rates_site_v1";
+    const LS_RATES_SHOP = "sahodmaker_rates_shop_v1";
+
+    function getActiveType(){ return payrollTypeEl.value; }
+    function keyForType(t){ return (t === "SHOP") ? LS_RATES_SHOP : LS_RATES_SITE; }
+
+    function loadRates(type){
+      const t = type || getActiveType();
+      try{
+        const raw = localStorage.getItem(keyForType(t));
+        if(!raw) return [];
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+      }catch(e){
+        return [];
+      }
+    }
+    function saveRates(arr, type){
+      const t = type || getActiveType();
+      localStorage.setItem(keyForType(t), JSON.stringify(arr));
+    }
+
+    function normalizeName(s){ return (s || "").trim().toLowerCase(); }
+
+    function findRateByName(name, type){
+      const rates = loadRates(type);
+      const key = normalizeName(name);
+      return rates.find(r => normalizeName(r.name) === key) || null;
+    }
+
+    // ✅ Payroll datalist = SITE + SHOP combined (unique)
+    function refreshDatalist(){
+      const all = [...loadRates("SITE"), ...loadRates("SHOP")];
+      const map = new Map(); // key = normalized name -> display name
+      all.forEach(r => {
+        const k = normalizeName(r.name);
+        if(!k) return;
+        if(!map.has(k)) map.set(k, r.name);
+      });
+
+      nameList.innerHTML = "";
+      [...map.values()].sort((a,b) => a.localeCompare(b)).forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        nameList.appendChild(opt);
+      });
+    }
+
+    // ---- Money helpers ----
+    function formatPeso(n){
+      const sign = n < 0 ? "-" : "";
+      const abs = Math.abs(n);
+      return sign + "₱" + abs.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+    function truncateNumber(n){ return n < 0 ? Math.ceil(n) : Math.floor(n); }
+    function toNumber(val){
+      const cleaned = (val || "").toString().replace(/,/g,"").trim();
+      const num = parseFloat(cleaned);
+      return isNaN(num) ? 0 : num;
+    }
+
+    function computeRow(row){
+      const rate = toNumber(row.querySelector('.rate').value);
+      const hrs  = toNumber(row.querySelector('.hrs').value);
+      const net = truncateNumber((rate / 8) * hrs);
+
+      row.querySelector('.net').value = (net || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      row.dataset.net = (net || 0).toString();
+      computeGrandTotal();
+    }
+
+    function computeGrandTotal(){
+      let total = 0;
+      [...tbody.querySelectorAll('tr')].forEach(tr => total += parseInt(tr.dataset.net || "0", 10));
+      grandTotalEl.textContent = formatPeso(total);
+    }
+
+    // ✅ Autofill: prefer selected type, fallback to other
+    function maybeAutofillRate(row){
+      const name = row.querySelector('.name').value;
+
+      const preferred = getActiveType();
+      const other = preferred === "SITE" ? "SHOP" : "SITE";
+
+      const match = findRateByName(name, preferred) || findRateByName(name, other);
+
+      if(match){
+        const idInput = row.querySelector('.id');
+        if(!idInput.value.trim() && match.id) idInput.value = match.id;
+
+        const rateInput = row.querySelector('.rate');
+        if(!rateInput.value.trim()){
+          rateInput.value = match.rate ?? "";
+        }
+      }
+
+      computeRow(row);
+    }
+
+    function addRow(data = {}){
+      const tr = document.createElement('tr');
+      tr.dataset.net = "0";
+      tr.innerHTML = `
+        <td class="col-id"><input class="id" value="${data.id ?? ""}" placeholder="00000"></td>
+        <td class="col-name"><input class="name" list="nameList" value="${data.name ?? ""}" placeholder="LASTNAME, FIRSTNAME"></td>
+        <td class="col-rate rateCell"><input class="rate num" value="${data.rate ?? ""}" placeholder="650"></td>
+        <td class="col-hrs"><input class="hrs num" value="${data.hrs ?? ""}" placeholder="72.00"></td>
+        <td class="col-net"><input class="net num readonly" value="0" readonly></td>
+        <td class="col-del delCell"><button class="smallbtn del" type="button">X</button></td>
+      `;
+
+      const nameInput = tr.querySelector('.name');
+      const rateInput = tr.querySelector('.rate');
+      const hrsInput  = tr.querySelector('.hrs');
+
+      nameInput.addEventListener('change', () => maybeAutofillRate(tr));
+      nameInput.addEventListener('blur',   () => maybeAutofillRate(tr));
+      rateInput.addEventListener('input',  () => computeRow(tr));
+      hrsInput.addEventListener('input',   () => computeRow(tr));
+
+      tr.querySelector('.del').addEventListener('click', () => {
+        tr.remove();
+        computeGrandTotal();
+      });
+
+      tbody.appendChild(tr);
+      if((data.name || "").trim()) maybeAutofillRate(tr);
+      else computeRow(tr);
+    }
+
+    // ---- Rates Manager UI (separate SITE/SHOP lists) ----
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const ratesList = document.getElementById('ratesList');
+    const ratesTypeEl = document.getElementById('ratesType');
+    const editingLabel = document.getElementById('editingLabel');
+
+    function openModal(){
+      ratesTypeEl.value = getActiveType(); // default editor follows payroll type
+      editingLabel.textContent = ratesTypeEl.value;
+      renderRatesEditor();
+      modalBackdrop.style.display = "flex";
+    }
+    function closeModal(){ modalBackdrop.style.display = "none"; }
+
+    function renderRatesEditor(){
+      const t = ratesTypeEl.value;
+      editingLabel.textContent = t;
+
+      const rates = loadRates(t);
+      ratesList.innerHTML = "";
+
+      if(rates.length === 0){
+        rates.push({id:"", name:"", rate:""});
+      }
+
+      rates.forEach((r, idx) => {
+        const id = document.createElement('input');
+        id.value = r.id ?? "";
+        id.placeholder = "00000";
+
+        const name = document.createElement('input');
+        name.value = r.name ?? "";
+        name.placeholder = "LASTNAME, FIRSTNAME";
+
+        const rate = document.createElement('input');
+        rate.className = "num";
+        rate.value = r.rate ?? "";
+        rate.placeholder = "650";
+
+        const del = document.createElement('button');
+        del.className = "smallbtn";
+        del.type = "button";
+        del.textContent = "X";
+        del.addEventListener('click', () => {
+          const current = collectRatesFromEditor();
+          current.splice(idx, 1);
+          saveRates(sanitizeRates(current), t);
+          renderRatesEditor();
+          refreshDatalist(); // always refresh combined suggestions
+        });
+
+        ratesList.appendChild(id);
+        ratesList.appendChild(name);
+        ratesList.appendChild(rate);
+        ratesList.appendChild(del);
+      });
+    }
+
+    function collectRatesFromEditor(){
+      const inputs = [...ratesList.querySelectorAll('input')];
+      const rows = [];
+      for(let i=0; i<inputs.length; i+=3){
+        rows.push({
+          id: inputs[i].value,
+          name: inputs[i+1].value,
+          rate: inputs[i+2].value
+        });
+      }
+      return rows;
+    }
+
+    function sanitizeRates(arr){
+      return arr
+        .map(r => ({
+          id: (r.id || "").trim(),
+          name: (r.name || "").trim().toUpperCase(),
+          rate: (r.rate || "").toString().replace(/,/g,"").trim()
+        }))
+        .filter(r => r.name.length > 0);
+    }
+
+    // ---- Buttons ----
+    document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+    document.getElementById('printBtn').addEventListener('click', () => window.print());
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      if(!confirm("Clear all payroll rows?")) return;
+      tbody.innerHTML = "";
+      computeGrandTotal();
+    });
+
+    document.getElementById('ratesBtn').addEventListener('click', openModal);
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    modalBackdrop.addEventListener('click', (e) => { if(e.target === modalBackdrop) closeModal(); });
+
+    ratesTypeEl.addEventListener('change', () => renderRatesEditor());
+
+    document.getElementById('addRateBtn').addEventListener('click', () => {
+      const t = ratesTypeEl.value;
+      const current = loadRates(t);
+      current.push({id:"", name:"", rate:""});
+      saveRates(current, t);
+      renderRatesEditor();
+      refreshDatalist();
+    });
+
+    document.getElementById('saveRatesBtn').addEventListener('click', () => {
+      const t = ratesTypeEl.value;
+      const collected = collectRatesFromEditor();
+      const cleaned = sanitizeRates(collected);
+      saveRates(cleaned, t);
+      renderRatesEditor();
+      refreshDatalist();
+      // Autofill current rows (fills only empty rate)
+      [...tbody.querySelectorAll('tr')].forEach(tr => maybeAutofillRate(tr));
+      alert(`Rates saved for ${t}!`);
+    });
+
+    // Export / Import (per type)
+    const importFile = document.getElementById('importFile');
+
+    document.getElementById('exportRatesBtn').addEventListener('click', () => {
+      const t = ratesTypeEl.value;
+      const data = JSON.stringify(loadRates(t), null, 2);
+      const blob = new Blob([data], {type:"application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rates_${t.toLowerCase()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importRatesBtn').addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', async () => {
+      const file = importFile.files[0];
+      if(!file) return;
+      const t = ratesTypeEl.value;
+      try{
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if(!Array.isArray(parsed)) throw new Error("Invalid JSON format (must be array).");
+        saveRates(sanitizeRates(parsed), t);
+        renderRatesEditor();
+        refreshDatalist();
+        alert(`Rates imported for ${t}!`);
+      }catch(err){
+        alert("Import failed: " + err.message);
+      }finally{
+        importFile.value = "";
+      }
+    });
+
+    // When Payroll Type changes: suggestions stay combined, but autofill preference changes
+    payrollTypeEl.addEventListener('change', () => {
+      refreshDatalist();
+      [...tbody.querySelectorAll('tr')].forEach(tr => maybeAutofillRate(tr));
+    });
+
+    // ---- Init ----
+    refreshDatalist();
+    addRow(); // start with 1 empty row
+  </script>
+</body>
+</html>
