@@ -149,7 +149,6 @@
 
       <div>
         <div class="actions">
-          <!-- ✅ bulk add control -->
           <div class="bulkAdd" title="Add multiple empty workers at once">
             <label for="bulkCount">Add rows:</label>
             <input id="bulkCount" type="number" min="1" max="200" value="10" />
@@ -158,7 +157,8 @@
 
           <button id="addRowBtn" type="button">+ Add Worker</button>
           <button id="ratesBtn" type="button">Rates Manager</button>
-          <button id="printBtn" type="button">Print / Save PDF</button>
+          <button id="printBtn" type="button">Print</button>
+          <button id="pdfBtn" type="button">Download PDF</button>
           <button id="clearBtn" type="button">Clear</button>
         </div>
         <div class="hint">Payroll suggestions show ALL names (SITE+SHOP). Autofill prefers selected type, then fallback.</div>
@@ -215,7 +215,6 @@
           <input id="importFile" type="file" accept="application/json" style="display:none;">
         </div>
 
-        <!-- ✅ Search bar -->
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center;">
           <input id="ratesSearch" placeholder="Search name (e.g. DIZON / TEOXON)" style="flex:1; min-width:220px;">
         </div>
@@ -417,13 +416,11 @@
         visibleRates = rates.filter(r => ((r.name || "").toLowerCase()).includes(ratesSearchQuery));
       }
 
-      // if totally empty list, show one blank row
       if(rates.length === 0){
         visibleRates = [{id:"", name:"", rate:""}];
       }
 
       visibleRates.forEach((r) => {
-        // find real index in original array (so delete works even filtered)
         const realIndex = rates.findIndex(x =>
           (x.id ?? "") === (r.id ?? "") &&
           (x.name ?? "") === (r.name ?? "") &&
@@ -448,12 +445,11 @@
         del.type = "button";
         del.textContent = "X";
         del.addEventListener('click', () => {
-          const current = collectRatesFromEditor();
-          // If filtered blank row (no real index), just re-render
+          const current = loadRates(t);
           if(realIndex >= 0) current.splice(realIndex, 1);
-          saveRates(sanitizeRates(current), t);
+          saveRates(current, t);
           renderRatesEditor();
-          refreshDatalist(); // combined suggestions
+          refreshDatalist();
         });
 
         ratesList.appendChild(id);
@@ -465,8 +461,6 @@
 
     function collectRatesFromEditor(){
       const inputs = [...ratesList.querySelectorAll('input')];
-      // IMPORTANT: collect only what is visible in editor.
-      // We'll merge by reloading full list when saving to avoid losing hidden rows.
       const rows = [];
       for(let i=0; i<inputs.length; i+=3){
         rows.push({
@@ -497,6 +491,7 @@
     });
 
     document.getElementById('printBtn').addEventListener('click', () => window.print());
+
     document.getElementById('clearBtn').addEventListener('click', () => {
       if(!confirm("Clear all payroll rows?")) return;
       tbody.innerHTML = "";
@@ -531,10 +526,6 @@
     document.getElementById('saveRatesBtn').addEventListener('click', () => {
       const t = ratesTypeEl.value;
 
-      // If you saved while filtered, we should not lose hidden rows.
-      // We'll save based on FULL list but replace edited rows ONLY if not filtered.
-      // Simple safe approach: disable saving when filtered? Nah.
-      // We'll do: if search is active -> require clearing search before saving.
       if(ratesSearchQuery){
         alert("Clear the search first before saving, para hindi mawala yung hidden rows.");
         return;
@@ -595,9 +586,94 @@
       [...tbody.querySelectorAll('tr')].forEach(tr => maybeAutofillRate(tr));
     });
 
+    // ---- Download PDF ----
+    async function downloadPDF(){
+      // Close modal if open
+      closeModal();
+
+      const original = document.querySelector('.wrap');
+      const clone = original.cloneNode(true);
+
+      // Remove action buttons/hints from clone
+      const actions = clone.querySelector('.actions');
+      if(actions) actions.remove();
+      const hint = clone.querySelector('.hint');
+      if(hint) hint.remove();
+
+      // Remove payroll type block from clone
+      const payrollTypeBlock = clone.querySelector('.payrollTypeBlock');
+      if(payrollTypeBlock) payrollTypeBlock.remove();
+
+      // Remove Rate and Delete columns from clone
+      clone.querySelectorAll('th.col-rate, th.col-del, td.col-rate, td.col-del, .rateCell, .delCell').forEach(el => el.remove());
+
+      // Turn inputs into plain text for cleaner PDF
+      clone.querySelectorAll('input, select').forEach(el => {
+        const span = document.createElement('span');
+        span.textContent = el.value || "";
+        span.style.display = "inline-block";
+        span.style.padding = "2px 0";
+        span.style.fontSize = "14px";
+        span.style.fontWeight = el.classList.contains('readonly') ? "700" : "400";
+        el.replaceWith(span);
+      });
+
+      // Put clone offscreen
+      const holder = document.createElement('div');
+      holder.style.position = "fixed";
+      holder.style.left = "-99999px";
+      holder.style.top = "0";
+      holder.style.width = original.getBoundingClientRect().width + "px";
+      holder.appendChild(clone);
+      document.body.appendChild(holder);
+
+      // Render to canvas
+      const canvas = await html2canvas(clone, { scale: 2, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+
+      // Build PDF (A4)
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF("p", "mm", "a4");
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = pageWidth;
+      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+
+      let position = 0;
+      let heightLeft = imgHeight;
+
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position -= pageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const project = (document.getElementById('project')?.value || "Payroll").replace(/[^\w\-]+/g, "_");
+      const start = document.getElementById('startDate')?.value || "";
+      const end = document.getElementById('endDate')?.value || "";
+      pdf.save(`${project}_${start}_to_${end}.pdf`);
+
+      holder.remove();
+    }
+
+    document.getElementById('pdfBtn').addEventListener('click', () => {
+      downloadPDF().catch(err => alert("PDF download failed: " + err.message));
+    });
+
     // ---- Init ----
     refreshDatalist();
     addRow(); // start with 1 empty row
   </script>
+
+  <!-- PDF libs (for Download PDF button) -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </body>
 </html>
