@@ -418,12 +418,13 @@
       if(ratesSearchQuery){
         visibleRates = rates.filter(r => ((r.name || "").toLowerCase()).includes(ratesSearchQuery));
       }
-      if(rates.length === 0){
-        visibleRates = [{id:"", name:"", rate:""}];
+      if(visibleRates.length === 0){
+        visibleRates = [{id:"", name:"", rate:"", __new__: true}];
       }
 
-      visibleRates.forEach((r) => {
-        const realIndex = rates.findIndex(x =>
+      visibleRates.forEach((r, visibleIndex) => {
+        const realIndex = rates.findIndex((x, idx) =>
+          idx >= 0 &&
           (x.id ?? "") === (r.id ?? "") &&
           (x.name ?? "") === (r.name ?? "") &&
           (x.rate ?? "") === (r.rate ?? "")
@@ -432,15 +433,21 @@
         const id = document.createElement('input');
         id.value = r.id ?? "";
         id.placeholder = "00000";
+        id.dataset.realIndex = realIndex;
+        id.dataset.visibleIndex = visibleIndex;
 
         const name = document.createElement('input');
         name.value = r.name ?? "";
         name.placeholder = "LASTNAME, FIRSTNAME";
+        name.dataset.realIndex = realIndex;
+        name.dataset.visibleIndex = visibleIndex;
 
         const rate = document.createElement('input');
         rate.className = "num";
         rate.value = r.rate ?? "";
         rate.placeholder = "650";
+        rate.dataset.realIndex = realIndex;
+        rate.dataset.visibleIndex = visibleIndex;
 
         const del = document.createElement('button');
         del.className = "smallbtn";
@@ -448,8 +455,10 @@
         del.textContent = "X";
         del.addEventListener('click', () => {
           const current = loadRates(t);
-          if(realIndex >= 0) current.splice(realIndex, 1);
-          saveRates(current, t);
+          if(realIndex >= 0) {
+            current.splice(realIndex, 1);
+            saveRates(current, t);
+          }
           renderRatesEditor();
           refreshDatalist();
         });
@@ -468,10 +477,36 @@
         rows.push({
           id: inputs[i].value,
           name: inputs[i+1].value,
-          rate: inputs[i+2].value
+          rate: inputs[i+2].value,
+          realIndex: parseInt(inputs[i].dataset.realIndex || "-1", 10),
+          visibleIndex: parseInt(inputs[i].dataset.visibleIndex || "0", 10)
         });
       }
       return rows;
+    }
+
+    function mergeEditedRates(fullRates, editedRows){
+      const merged = [...fullRates];
+      const newRows = [];
+
+      editedRows.forEach(row => {
+        const cleanedRow = {
+          id: (row.id || "").trim(),
+          name: (row.name || "").trim().toUpperCase(),
+          rate: (row.rate || "").toString().replace(/,/g,"").trim()
+        };
+
+        const isEmpty = !cleanedRow.name && !cleanedRow.id && !cleanedRow.rate;
+        if(isEmpty) return;
+
+        if(row.realIndex >= 0 && row.realIndex < merged.length){
+          merged[row.realIndex] = cleanedRow;
+        }else{
+          newRows.push(cleanedRow);
+        }
+      });
+
+      return sanitizeRates([...merged, ...newRows]);
     }
 
     function sanitizeRates(arr){
@@ -523,14 +558,13 @@
     document.getElementById('saveRatesBtn').addEventListener('click', () => {
       const t = ratesTypeEl.value;
 
-      if(ratesSearchQuery){
-        alert("Clear the search first before saving, para hindi mawala yung hidden rows.");
-        return;
-      }
-
       const collected = collectRatesFromEditor();
-      const cleaned = sanitizeRates(collected);
-      saveRates(cleaned, t);
+      const current = loadRates(t);
+      const finalRates = ratesSearchQuery
+        ? mergeEditedRates(current, collected)
+        : sanitizeRates(collected);
+
+      saveRates(finalRates, t);
 
       renderRatesEditor();
       refreshDatalist();
