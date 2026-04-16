@@ -313,15 +313,6 @@
       return isNaN(num) ? 0 : num;
     }
 
-    function formatHoursInput(input){
-      if(!input) return;
-      const raw = (input.value || "").toString().replace(/,/g,"").trim();
-      if(raw === "") return;
-      const num = parseFloat(raw);
-      if(isNaN(num)) return;
-      input.value = num.toFixed(2);
-    }
-
     function computeRow(row){
       const rate = toNumber(row.querySelector('.rate').value);
       const hrs  = toNumber(row.querySelector('.hrs').value);
@@ -396,6 +387,21 @@
       const rateInput = tr.querySelector('.rate');
       const hrsInput  = tr.querySelector('.hrs');
 
+      function formatHoursInput(){
+        const raw = (hrsInput.value || '').toString().replace(/,/g,'').trim();
+        if(raw === ''){
+          computeRow(tr);
+          return;
+        }
+        const num = parseFloat(raw);
+        if(isNaN(num)){
+          computeRow(tr);
+          return;
+        }
+        hrsInput.value = num.toFixed(2);
+        computeRow(tr);
+      }
+
       // datalist can be a bit inconsistent on some browsers when clicking suggestions,
       // so we listen to input/change/blur/enter and queue autofill.
       nameInput.addEventListener('input',  () => queueAutofillRate(tr, 0));
@@ -406,6 +412,14 @@
       });
       rateInput.addEventListener('input',  () => computeRow(tr));
       hrsInput.addEventListener('input',   () => computeRow(tr));
+      hrsInput.addEventListener('blur',    formatHoursInput);
+      hrsInput.addEventListener('change',  formatHoursInput);
+      hrsInput.addEventListener('keydown', (e) => {
+        if(e.key === 'Enter'){
+          e.preventDefault();
+          formatHoursInput();
+        }
+      });
 
       tr.querySelector('.del').addEventListener('click', () => {
         tr.remove();
@@ -413,6 +427,10 @@
       });
 
       tbody.appendChild(tr);
+      if((data.hrs ?? '').toString().trim() !== '') {
+        const num = parseFloat((data.hrs ?? '').toString().replace(/,/g,''));
+        if(!isNaN(num)) hrsInput.value = num.toFixed(2);
+      }
       if((data.name || "").trim()) maybeAutofillRate(tr);
       else computeRow(tr);
     }
