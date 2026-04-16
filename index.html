@@ -331,24 +331,44 @@
 
     // Autofill: prefer selected type, fallback to other
     function maybeAutofillRate(row){
-      const name = row.querySelector('.name').value;
+      const nameInput = row.querySelector('.name');
+      const idInput = row.querySelector('.id');
+      const rateInput = row.querySelector('.rate');
+      const typedName = nameInput.value;
+      const normalizedTyped = normalizeName(typedName);
 
       const preferred = getActiveType();
       const other = preferred === "SITE" ? "SHOP" : "SITE";
 
-      const match = findRateByName(name, preferred) || findRateByName(name, other);
+      const match = findRateByName(typedName, preferred) || findRateByName(typedName, other);
 
       if(match){
-        const idInput = row.querySelector('.id');
-        if(!idInput.value.trim() && match.id) idInput.value = match.id;
+        // normalize selected name para mas stable pag pinili from datalist
+        if(nameInput.value.trim()) nameInput.value = match.name ?? nameInput.value;
 
-        const rateInput = row.querySelector('.rate');
-        if(!rateInput.value.trim()){
-          rateInput.value = match.rate ?? "";
+        // pag nagpalit ng tao, dapat sumabay din yung ID at rate
+        idInput.value = match.id ?? "";
+        rateInput.value = (match.rate ?? "").toString();
+
+        row.dataset.lastMatchedName = normalizeName(match.name);
+      }else{
+        const lastMatchedName = row.dataset.lastMatchedName || "";
+
+        // kung dati may match tapos nag-iba na yung name to something unmatched,
+        // clear natin para hindi maiwan yung lumang tao/rate.
+        if(normalizedTyped !== lastMatchedName){
+          idInput.value = "";
+          rateInput.value = "";
+          row.dataset.lastMatchedName = "";
         }
       }
 
       computeRow(row);
+    }
+
+    function queueAutofillRate(row, delay = 0){
+      clearTimeout(row._autofillTimer);
+      row._autofillTimer = setTimeout(() => maybeAutofillRate(row), delay);
     }
 
     function addRow(data = {}){
@@ -367,8 +387,14 @@
       const rateInput = tr.querySelector('.rate');
       const hrsInput  = tr.querySelector('.hrs');
 
-      nameInput.addEventListener('change', () => maybeAutofillRate(tr));
-      nameInput.addEventListener('blur',   () => maybeAutofillRate(tr));
+      // datalist can be a bit inconsistent on some browsers when clicking suggestions,
+      // so we listen to input/change/blur/enter and queue autofill.
+      nameInput.addEventListener('input',  () => queueAutofillRate(tr, 0));
+      nameInput.addEventListener('change', () => queueAutofillRate(tr, 0));
+      nameInput.addEventListener('blur',   () => queueAutofillRate(tr, 80));
+      nameInput.addEventListener('keydown', (e) => {
+        if(e.key === 'Enter' || e.key === 'Tab') queueAutofillRate(tr, 0);
+      });
       rateInput.addEventListener('input',  () => computeRow(tr));
       hrsInput.addEventListener('input',   () => computeRow(tr));
 
