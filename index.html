@@ -313,6 +313,15 @@
       return isNaN(num) ? 0 : num;
     }
 
+    function formatHoursInput(input){
+      if(!input) return;
+      const raw = (input.value || "").toString().replace(/,/g,"").trim();
+      if(raw === "") return;
+      const num = parseFloat(raw);
+      if(isNaN(num)) return;
+      input.value = num.toFixed(2);
+    }
+
     function computeRow(row){
       const rate = toNumber(row.querySelector('.rate').value);
       const hrs  = toNumber(row.querySelector('.hrs').value);
